@@ -2,11 +2,7 @@
 #include <stdlib.h>
 #include "SDL.h"
 #include "fontset.h"
-
-#define MEMORY_SIZE 4096
-#define REGISTER_SIZE 16
-#define STACK_SIZE 16
-
+#include "cpu.c"
 
 // SDL_t is a struct that contains the SDL window and renderer
 typedef struct {
@@ -21,58 +17,7 @@ typedef struct {
     int window_scale;
 } DisplayConfig_t;
 
-// initialise chip8
-typedef struct {
-    unsigned char opcode; // 2 byte opcode
-    unsigned char memory[MEMORY_SIZE]; // 4k memory
-    unsigned char V [REGISTER_SIZE]; // 16 registers
-    unsigned short stack[STACK_SIZE]; // A stack with 16 levels
-    unsigned char sp; // stack pointer
-    unsigned char gfx [64 * 32]; // graphics
-    unsigned char delay_timer;
-    unsigned char sound_timer;
-    unsigned short I; // index register
-    unsigned short pc; // program counter
-    unsigned char keypad[16]; // keypad
-} Chip8_t;
 
-
-void init_chip8(Chip8_t *chip8) {
-    chip8->opcode = 0; // reset opcode
-    chip8->pc = 0x200; // program counter starts at 0x200
-    chip8->I = 0; // reset index register
-    chip8->sp = 0; // reset stack pointer
-
-//    clear display
-    for (int i = 0; i < 2048; i++) {
-        chip8->gfx[i] = 0;
-    }
-
-//    clear stack
-    for (int i = 0; i < 16; i++) {
-        chip8->stack[i] = 0;
-    }
-
-//    clear registers
-    for (int i = 0; i < 16; i++) {
-        chip8->V[i] = 0;
-    }
-
-//    clear memory
-    for (int i = 0; i < 4096; i++) {
-        chip8->memory[i] = 0;
-    }
-
-//    load fontset
-    for (int i = 0; i < 80; i++) {
-        chip8->memory[i] = fontset[i];
-    }
-
-//    reset timers
-    chip8->delay_timer = 0;
-    chip8->sound_timer = 0;
-
-}
 
 void init_display(DisplayConfig_t *displayConfig){
     displayConfig->window_height = 32; // Original chip8 height
@@ -134,6 +79,7 @@ void destroy_sdl(SDL_t *sdl){
     puts("SDL Environment Destroyed");
     SDL_Quit();
 }
+
 
 int main (int argc, char **argv) {
     (void)argc;
