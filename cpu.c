@@ -18,7 +18,8 @@ typedef struct {
     unsigned char sound_timer;
     unsigned short I; // index register
     unsigned short pc; // program counter
-    unsigned char keypad[16]; // keypad
+    unsigned char keypad[16];
+    int draw_flag;
 } Chip8_t;
 
 // 00E0 - CLS
@@ -188,25 +189,85 @@ void opcode_Bnnn(Chip8_t *chip8, unsigned short nnn) {
 
 //Cxkk - RND Vx, byte
 //Set Vx = random byte AND kk.
-//The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
-// The results are stored in Vx. See instruction 8xy2 for more information on AND
+//The interpreter generates a random number from 0 to 255, which is then
+// ANDed with the value kk.The results are stored in Vx. See instruction
+// 8xy2 for more information on AND
 void opcode_Cxkk(Chip8_t *chip8, unsigned short x, unsigned short kk) {
-    chip8 -> V[x] = (rand() % 256) & kk;
+    chip8 -> V[x] = (rand() % 256) & kk; // NOLINT(cert-msc30-c, cert-msc50-cpp)
 }
 
 //Dxyn - DRW Vx, Vy, nibble
-//Display n-byte sprite starting at memory location I at (Vx, Vy)
-//set VF = collision. The interpreter reads n bytes from memory, starting
-// at the address stored in I. These bytes are then displayed as sprites
-// on screen at coordinates (Vx, Vy). Sprites are XORed onto the
-// existing screen. If this causes any
-// pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite
-// is positioned so part of it is outside the coordinates of the display,
-// it wraps around to the opposite side of the screen. See instruction 8xy3
-// for more information on XOR, and section 2.4, Display, for more information
-// on the Chip-8 screen and sprites.
-void opcode_Dxyn(){
-//    TODO
+//Display n-byte sprite starting at memory location I at (Vx, Vy) set VF = collision. The interpreter reads n bytes
+// from memory, starting at the address stored in I. These bytes are then displayed as sprites on screen at coordinates
+// (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any pixels to be erased, VF is set to 1,
+// otherwise it is set to 0. If the sprite is positioned so part of it is outside the coordinates of the display,
+// it wraps around to the opposite side of the screen. See instruction 8xy3 for more information on XOR,
+// and section 2.4, Display, for more information on the Chip-8 screen and sprites.
+void opcode_Dxyn(Chip8_t *chip8, unsigned short x, unsigned short y, unsigned short n){
+    unsigned short pixel;
+    chip8->V[0x0F] = 0;
+    int yline;
+    int xline;
+    for (yline = 0; yline < n; yline++){
+        pixel = chip8-> memory[chip8->I + yline]; // reading bytes from memory
+        for (xline = 0; xline < 8; xline++) {
+            if ((pixel & (0x80 >> xline)) != 0) {
+                chip8->V[0x0F] = chip8 -> gfx[(x + xline + ((y + yline) * 64))]; // Setting VF flag is a pixel is erased
+                chip8->gfx[(x + xline + ((y + yline) * 64))] ^= 1; // Sprites are XORed onto existing screen
+            }
+        }
+    }
+
+    chip8->draw_flag = 1; // Set draw flag to true
+    chip8->pc += 2; // increment pc
+}
+
+//Ex9E - SKP Vx
+//Skip next instruction if key with the value of Vx is pressed.
+//Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position,
+// PC is increased by 2.
+void opcode_Ex9E(Chip8_t *chip8, unsigned short x) {
+    chip8->pc += (chip8->keypad[chip8->V[x]]) ? 2 : 0;
+}
+
+//ExA1 - SKNP Vx
+//Skip next instruction if key with the value of Vx is not pressed.
+//Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position,
+// PC is increased by 2.
+void opcode_ExA1(Chip8_t *chip8, unsigned short x) {
+    chip8->pc += (!chip8->keypad[chip8->V[x]]) ? 2 : 0;
+}
+
+//Fx07 - LD Vx, DT
+//Set Vx = delay timer value.
+//The value of DT is placed into Vx.
+void opcode_Fx07(Chip8_t *chip8, unsigned short x) {
+    chip8->V[x] = chip8->delay_timer;
+}
+
+//Fx0A - LD Vx, K
+//Wait for a key press, store the value of the key in Vx.
+//All execution stops until a key is pressed, then the value of that key is stored in Vx.
+void opcode_Fx0A(Chip8_t *chip8, unsigned short x) {
+    int found_key = 0;
+    for (int i = 0; i < 16; i++) {
+        if (chip8->keypad[i]) {
+            chip8->V[x] = i;
+            found_key = 1;
+            break;
+        }
+    }
+
+    if (!found_key) {
+        chip8->pc -= 2; // decrement pc so we move on
+    }
+}
+
+//Fx15 - LD DT, Vx
+//Set delay timer = Vx.
+//DT is set equal to the value of Vx.
+void opcode_Fx15(Chip8_t *chip8, unsigned short x) {
+    chip8->delay_timer = chip8->V[x];
 }
 
 void emulate_cycle(Chip8_t *chip8){
