@@ -270,9 +270,64 @@ void opcode_Fx15(Chip8_t *chip8, unsigned short x) {
     chip8->delay_timer = chip8->V[x];
 }
 
+//Fx18 - LD ST, Vx
+//Set sound timer = Vx.
+//ST is set equal to the value of Vx.
+void opcode_Fx18(Chip8_t *chip8, unsigned short x) {
+    chip8->sound_timer = chip8 ->V[x];
+}
+
+//Fx29 - LD F, Vx
+//Set I = location of sprite for digit Vx.
+//The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
+// See section 2.4, Display, for more information on the Chip-8 hexadecimal font.
+void opcode_Fx29(Chip8_t *chip8, unsigned short x){
+    chip8->I = (chip8->V[x]*0x05); // Each chararacter has 5 elements hence * 0x05
+}
+
+//Fx33 - LD B, Vx
+//Store BCD representation of Vx in memory locations I, I+1, and I+2.
+//The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I,
+// the tens digit at location I+1, and the ones digit at location I+2.
+void opcode_Fx33(Chip8_t *chip8, unsigned short x) {
+    unsigned short I = chip8->I;
+
+    chip8->V[I] = chip8->V[x] / 100;
+    chip8->V[I+1] = (chip8->V[x] / 10) % 10;
+    chip8->V[I+2] = (chip8->V[x] % 100) % 10;
+}
+
+//Fx55 - LD [I], Vx
+//Store registers V0 through Vx in memory starting at location I.
+//The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
+void opcode_Fx55(Chip8_t *chip8, unsigned short x) {
+    unsigned short I = chip8->I;
+    int i;
+    for (i = 0; i <= x; i++) {
+        chip8->memory[I + i];
+    }
+}
+
+//Fx65 - LD Vx, [I]
+//Read registers V0 through Vx from memory starting at location I.
+//The interpreter reads values from memory starting at location I into registers V0 through Vx.
+void opcode_Fx65(Chip8_t *chip8, unsigned short x) {
+    unsigned short I = chip8->I;
+    int i;
+    for (i = 0; i <= x; i++) {
+        chip8->V[i] = chip8->memory[I+i];
+    }
+}
+
+
 void emulate_cycle(Chip8_t *chip8){
 //    fetch opcode
     chip8 -> opcode = chip8 -> memory[chip8 -> pc] << 8 | chip8 -> memory[chip8 -> pc + 1];
+
+// register identifiers
+    unsigned short x = (chip8->opcode & 0x0F00) >> 8;
+    unsigned short y = (chip8->opcode & 0x0F00) >> 4;
+
 
 //    decode opcode
     switch(chip8 -> opcode & 0xF000) {
@@ -282,6 +337,9 @@ void emulate_cycle(Chip8_t *chip8){
                 opcode_00E0(chip8);
             }
     }
+
+//    increment pc
+    chip8->pc += 2;
 
 }
 
