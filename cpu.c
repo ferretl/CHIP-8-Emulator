@@ -1,26 +1,5 @@
 #include <stdlib.h>
-
-#define MEMORY_SIZE 4096
-#define REGISTER_SIZE 16
-#define STACK_SIZE 16
-#define SCREEN_WIDTH 64
-#define SCREEN_HEIGHT 32
-
-
-typedef struct {
-    unsigned char opcode; // 2 byte opcode
-    unsigned char memory[MEMORY_SIZE]; // 4k memory
-    unsigned char V [REGISTER_SIZE]; // 16 registers
-    unsigned short stack[STACK_SIZE]; // A stack with 16 levels
-    unsigned char sp; // stack pointer
-    unsigned char gfx [SCREEN_WIDTH * SCREEN_HEIGHT]; // graphics
-    unsigned char delay_timer;
-    unsigned char sound_timer;
-    unsigned short I; // index register
-    unsigned short pc; // program counter
-    unsigned char keypad[16];
-    int draw_flag;
-} Chip8_t;
+#include "cpu.h"
 
 // 00E0 - CLS
 // Clears the Display
@@ -118,13 +97,8 @@ void opcode_8xy3(Chip8_t *chip8, unsigned short x, unsigned short y) {
 // bits (i.e., > 255) VF is set to 1, otherwise 0. Only the lowest 8 bits of the
 // result are kept, and stored in Vx.
 void opcode_8xy4(Chip8_t *chip8, unsigned short x, unsigned short y) {
-    if (chip8->V[x] + chip8->V[y] > 0xFF) {
-        chip8->V[x] = (chip8->V[x] + chip8->V[y]) & 0xFF;
-        chip8->V[0x0F] = 1;
-    } else {
-        chip8->V[x] += chip8->V[y];
-        chip8->V[0x0F] = 0;
-    }
+    chip8-> V[0x0F] = (chip8-> V[x] + chip8->V[y]) > 0xFF00 ? 1 : 0;
+    chip8-> V[x] += chip8->V[y];
 }
 
 //8xy5 - SUB Vx, Vy
@@ -259,7 +233,7 @@ void opcode_Fx0A(Chip8_t *chip8, unsigned short x) {
     }
 
     if (!found_key) {
-        chip8->pc -= 2; // decrement pc so we move on
+        chip8->pc -= 2; // decrement pc so that the same instruction is executed again
     }
 }
 
@@ -268,6 +242,13 @@ void opcode_Fx0A(Chip8_t *chip8, unsigned short x) {
 //DT is set equal to the value of Vx.
 void opcode_Fx15(Chip8_t *chip8, unsigned short x) {
     chip8->delay_timer = chip8->V[x];
+}
+
+//Fx1E - ADD I, Vx
+//Set I = I + Vx.
+//The values of I and Vx are added, and the results are stored in I.
+void opcode_Fx1E(Chip8_t *chip8, unsigned short x) {
+    chip8->I += chip8->V[x];
 }
 
 //Fx18 - LD ST, Vx
@@ -328,18 +309,135 @@ void emulate_cycle(Chip8_t *chip8){
     unsigned short x = (chip8->opcode & 0x0F00) >> 8;
     unsigned short y = (chip8->opcode & 0x0F00) >> 4;
 
-
+//    constants
+    unsigned short nn = chip8->opcode & 0x00FF;
+    unsigned short nnn = chip8 ->opcode & 0x0FFF;
+    
 //    decode opcode
-    switch(chip8 -> opcode & 0xF000) {
+    switch (chip8->opcode & 0xF000) {
         case 0x0000:
             switch (chip8->opcode & 0x000F) {
-                case 0x00E: // 0x00E0: Clears the screen
-                opcode_00E0(chip8);
+                case 0x0000:
+                    opcode_00E0(chip8);
+                    break;
+                case 0x000E:
+                    opcode_00EE(chip8);
+                    break;
             }
+            break;
+        case 0x1000:
+            opcode_1nnn(chip8, nnn);
+            break;
+        case 0x2000:
+            opcode_2nnn(chip8, nnn);
+            break;
+        case 0x3000:
+            opcode_3xkk(chip8, x, nn);
+            break;
+        case 0x4000:
+            opcode_4xkk(chip8, x, nn);
+            break;
+        case 0x5000:
+            opcode_5xy0(chip8, x, y);
+            break;
+        case 0x6000:
+            opcode_6xkk(chip8, x, nn);
+            break;
+        case 0x7000:
+            opcode_7xkk(chip8, x, nn);
+        case 0x8000:
+            switch (chip8->opcode & 0x000F) {
+                case 0x0000:
+                    opcode_8xy0(chip8, x, y);
+                    break;
+                case 0x0001:
+                    opcode_8xy1(chip8, x, y);
+                    break;
+                case 0x0002:
+                    opcode_8xy2(chip8, x, y);
+                    break;
+                case 0x0003:
+                    opcode_8xy3(chip8, x, y);
+                    break;
+                case 0x0004:
+                    opcode_8xy4(chip8, x, y);
+                    break;
+                case 0x0005:
+                    opcode_8xy5(chip8, x, y);
+                    break;
+                case 0x0006:
+                    opcode_8xy6(chip8, x);
+                    break;
+                case 0x0007:
+                    opcode_8xy7(chip8, x, y);
+                    break;
+                case 0x000E:
+                    opcode_8xyE(chip8, x);
+                    break;
+            }
+            break;
+        case 0x9000:
+            opcode_9xy0(chip8, x, y);
+            break;
+        case 0xA000:
+            opcode_Annn(chip8, nnn);
+            break;
+        case 0xB000:
+            opcode_Bnnn(chip8, nnn);
+            break;
+        case 0xC000:
+            opcode_Cxkk(chip8, x, nn);
+            break;
+        case 0xD000:
+            opcode_Dxyn(chip8, x, y, chip8->opcode&0x000F);
+            break;
+        case 0xE000:
+            switch (chip8->opcode & 0x00FF) {
+                case 0x009E:
+                    opcode_Ex9E(chip8, x);
+                    break;
+                case 0x00A1:
+                    opcode_ExA1(chip8, x);
+                    break;
+            }
+            break;
+        case 0xF000:
+            switch (chip8->opcode & 0x00FF) {
+                case 0x0007:
+                    opcode_Fx07(chip8, x);
+                    break;
+                case 0x000A:
+                    opcode_Fx0A(chip8, x);
+                    break;
+                case 0x0015:
+                    opcode_Fx15(chip8, x);
+                    break;
+                case 0x0018:
+                    opcode_Fx18(chip8, x);
+                    break;
+                case 0x001E:
+                    opcode_Fx1E(chip8, x);
+                    break;
+                case 0x0029:
+                    opcode_Fx29(chip8, x);
+                    break;
+                case 0x0033:
+                    opcode_Fx33(chip8, x);
+                    break;
+                case 0x0055:
+                    opcode_Fx55(chip8, x);
+                    break;
+                case 0x0065:
+                    opcode_Fx65(chip8, x);
+                    break;
+            }
+            break;
+        default:
+            printf("Unknown opcode: 0x%X\n", chip8->opcode);
     }
 
 //    increment pc
-    chip8->pc += 2;
+chip8->pc += 2;
 
 }
 
